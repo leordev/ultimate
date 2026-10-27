@@ -540,6 +540,16 @@ function TranscriptEntries() {
   // Reveal a stored row without the auto-follow animation overriding the jump; a row older than those loaded needs the
   // history down to it first, and one in a folded run needs the run open.
   const [reveal, setReveal] = useState<number>()
+  // The pinned user turn asks for the page above when none of the loaded rows above the screen is a user turn.
+  const [earlier, setEarlier] = useState(0)
+  useEvent('ultimate:load-earlier', (value) => {
+    const target = (value as { conversationId?: number } | undefined)?.conversationId
+    if (target === id && !request.current) setEarlier((count) => count + 1)
+  })
+  useEffect(() => {
+    // oxlint-disable-next-line typescript/no-floating-promises -- loadEarlier catches history failures and displays them with setError.
+    if (earlier) void loadEarlier()
+  }, [earlier])
   useEvent('ultimate:reveal-entry', (value) => {
     const target = value as { conversationId?: number; entryId?: number } | undefined
     const entryId = target?.entryId
@@ -649,6 +659,7 @@ function TranscriptEntries() {
       {!loading && entries.length > 0 && cursor !== undefined && (
         <div
           className="flex min-h-5 items-center justify-center font-mono text-[11px] text-muted-foreground/70"
+          data-earlier-history
           ref={sentinel}
         >
           {pending ? (

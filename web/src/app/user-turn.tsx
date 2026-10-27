@@ -27,10 +27,10 @@ export function skillInput(text: string) {
     : undefined
 }
 
-/** The first phrase of a user turn's words, with an ellipsis when they go on. */
+/** The first phrase of a user turn's words, with an ellipsis when they go on; a list marker such as `1a.` is no phrase. */
 export function firstPhrase(text: string) {
   const body = text.trim()
-  const phrase = /^[\s\S]*?(?:[.!?](?=\s)|\n|$)/.exec(body)![0].trim()
+  const phrase = /^(?:[^\n]{4}[\s\S]*?|[\s\S]*?)(?:[.!?](?=\s)|\n|$)/.exec(body)![0].trim()
   return phrase.length < body.length ? `${phrase.replace(/[.!?]$/, '')}…` : phrase
 }
 

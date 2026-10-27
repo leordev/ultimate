@@ -88,3 +88,62 @@ it('pins the answered user turn while scrolled up and reveals it on click', asyn
   expect(top).toBeGreaterThanOrEqual(view.top)
   expect(top).toBeLessThan(view.bottom)
 })
+
+it('keeps the line through a jump to the top of a long run whose turn is not loaded yet', async () => {
+  const home = await temp('ultimate-pinned-long-')
+  cleanup.push(() => removeTemp(home))
+  const server = await fauxServer({
+    ultimateRoot: resolve('.'),
+    projectRoot: resolve('.'),
+    userHome: home,
+    home: join(home, 'state'),
+    port: 0,
+  })
+  cleanup.push(() => server.close())
+  server.host.faux!.setResponses([fauxAssistantMessage('Done.')])
+  const { data } = await post(server, '/api/extensions/subagents/actions/standing', {
+    args: { name: 'ultimate' },
+  })
+  const ultimate = data.result as ConversationId
+  const conversation = (await server.harness.conversation(ultimate, context))!
+  await (
+    await conversation.submit(
+      { type: 'input', content: 'Start the long job. Report when done.' },
+      context,
+    )
+  ).wait(context)
+  // Hundreds of answers without a turn of the user's: the turn is pages below what the transcript first loads.
+  await server.harness.commit(async (tx) => {
+    for (let index = 1; index <= 300; index++)
+      await tx.appendEntry(ultimate, {
+        kind: 'pi.assistant',
+        model: [fauxAssistantMessage(`Progress ${index}.`)],
+      })
+  }, context)
+
+  const browser = await chromium.launch({
+    executablePath: await browserBinary(),
+    headless: true,
+    env: { ...process.env, TMPDIR: undefined },
+  })
+  cleanup.push(() => browser.close())
+  const page = await browser.newPage({ viewport: { width: 1280, height: 900 } })
+  await page.goto(`${server.url}/?conversation=${ultimate}`)
+  const log = page.getByRole('log')
+  await log.getByText('Progress 300.', { exact: true }).waitFor()
+  // Record the line on every frame, from the jump to the top in one step until the turn has loaded.
+  const missing = await page.evaluate(async () => {
+    const scroll = document.querySelector('[role=log]')!.firstElementChild!
+    scroll.scrollTop = 0
+    let gone = 0
+    for (let frame = 0; frame < 600; frame++) {
+      await new Promise(requestAnimationFrame)
+      const line = document.querySelector('[data-pinned-turn]')
+      if (frame > 2 && !line) gone++
+      if (line?.textContent === 'Start the long job…') return gone
+      if (frame % 10 === 0) scroll.scrollTop = 0
+    }
+    return -1
+  })
+  expect(missing).toBe(0)
+})
