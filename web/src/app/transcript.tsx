@@ -56,6 +56,7 @@ import { ExtensionBoundary, Provided, Slot } from './boundary.tsx'
 import { ParkedRuns, RunStart } from '../sdk/types.ts'
 import type { CompactSummaryProps } from '../sdk/types.ts'
 import { MessageActions } from './message-actions.tsx'
+import { PinnedUserTurn } from './pinned-user.tsx'
 import { textOf, UserView } from './user-turn.tsx'
 import {
   anchorSelector,
@@ -176,6 +177,7 @@ export function Transcript({ dock }: { dock?: boolean }) {
         <ConversationContent className={cn(column(dock), 'gap-3 pt-6 pb-10')}>
           <TranscriptEntries />
         </ConversationContent>
+        <PinnedUserTurn dock={dock} />
         <ConversationScrollButton />
       </Conversation>
       {placeholder && <TranscriptSkeleton dock={dock} ref={skeleton} />}

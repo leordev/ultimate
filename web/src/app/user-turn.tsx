@@ -27,6 +27,13 @@ export function skillInput(text: string) {
     : undefined
 }
 
+/** The first phrase of a user turn's words, with an ellipsis when they go on. */
+export function firstPhrase(text: string) {
+  const body = text.trim()
+  const phrase = /^[\s\S]*?(?:[.!?](?=\s)|\n|$)/.exec(body)![0].trim()
+  return phrase.length < body.length ? `${phrase.replace(/[.!?]$/, '')}…` : phrase
+}
+
 /** The skill an input ran, folded: its name in the header, its instructions inside. */
 function SkillRun({ name, location, body }: { name: string; location: string; body: string }) {
   return (
@@ -82,7 +89,13 @@ export function UserView({
   const skill = skillInput(text)
   const additions = messageItems(useExtensions(), 'userBubble')
   return (
-    <Message className="group/message mt-3 first:mt-0" from="user">
+    <Message
+      className="group/message mt-3 first:mt-0"
+      data-turn-phrase={
+        firstPhrase(skill ? skill.request || `/${skill.name}` : text) || 'Your message'
+      }
+      from="user"
+    >
       <div className="relative">
         <MessageContent>
           {skill && <SkillRun {...skill} />}
