@@ -108,6 +108,39 @@ it('bounds a history page from below with after', async () => {
   }
 })
 
+it('reads only the inputs below a cursor with inputs=1', async () => {
+  const home = await temp('ultimate-history-')
+  const server = await fauxServer({ ultimateRoot: resolve('.'), home, userHome: home })
+  try {
+    const inputs = await server.harness.commit(async (tx) => {
+      const rows: EntryId[] = []
+      for (let n = 0; n < 3; n++) {
+        rows.push(
+          (
+            await tx.appendEntry(server.root.id, {
+              kind: 'pi.user',
+              input: true,
+              model: [{ role: 'user', content: `Turn ${n}`, timestamp: n }],
+            })
+          ).id,
+        )
+        for (let step = 0; step < 700; step++)
+          await tx.appendEntry(server.root.id, { kind: 'test.step', data: { step } })
+      }
+      return rows
+    }, context)
+    const page = (await (
+      await fetch(
+        `${server.url}/api/conversations/${server.root.id}/history?before=${inputs[2]}&inputs=1`,
+      )
+    ).json()) as HistoryResponse
+    expect(page.entries.map((entry) => entry.id)).toEqual(inputs.slice(0, 2).toReversed())
+    expect(page.before).toBeUndefined()
+  } finally {
+    await server.close()
+  }
+})
+
 it('pages stored fork history exclusively without changing active context', async () => {
   const home = await temp('ultimate-history-')
   const server = await fauxServer({ ultimateRoot: resolve('.'), home, userHome: home })

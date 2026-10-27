@@ -1,13 +1,20 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type {
+  Conversation,
   ConversationId,
   Cursor,
   DocumentWatch,
   EntryId,
+  EntryRecord,
   JsonObject,
   SubmissionId,
 } from '@earendil-works/pi-durable'
-import type { ServerEvents, ConversationSummary, ConfigureRequest } from '../shared/protocol.ts'
+import type {
+  ServerEvents,
+  ConversationSummary,
+  ConfigureRequest,
+  HistoryResponse,
+} from '../shared/protocol.ts'
 import { UI_REVISION, imageMimeTypes, maxImageBytes, maxImages } from '../shared/protocol.ts'
 import { listModels } from './models.ts'
 import { expandSkillCommand } from './skills.ts'
@@ -142,6 +149,29 @@ async function runAction(
   } finally {
     response.off('close', cancel)
   }
+}
+
+/**
+ * The conversation's own inputs below `before`, newest first, without the rows between them: the store is scanned here so
+ * the browser receives a page of inputs, not every entry. A fork's source history ends the scan.
+ */
+async function inputsBefore(conversation: Conversation, before: number): Promise<HistoryResponse> {
+  const size = 64
+  const inputs: EntryRecord[] = []
+  let cursor: Cursor | undefined
+  do {
+    const page = await conversation.entries(
+      { maxEntryId: (before - 1) as EntryId },
+      512,
+      cursor,
+      context,
+    )
+    const own = page.items.findIndex((entry) => entry.conversationId !== conversation.id)
+    inputs.push(...page.items.slice(0, own < 0 ? undefined : own).filter((entry) => entry.input))
+    cursor = own < 0 ? page.next : undefined
+  } while (cursor && inputs.length <= size)
+  const entries = inputs.slice(0, size)
+  return { entries, before: inputs.length > size ? entries.at(-1)!.id : undefined }
 }
 
 export async function createApi(
@@ -388,6 +418,10 @@ export async function createApi(
             throw new HttpError(400, 'Invalid history cursor or conversation id')
           const conversation = await harness.conversation(id as ConversationId, context)
           if (!conversation) throw new HttpError(404, 'Unknown conversation')
+          if (url.searchParams.get('inputs') === '1') {
+            json(200, await inputsBefore(conversation, before))
+            return true
+          }
           const size = after ? 512 : 64
           const page = await conversation.entries(
             { maxEntryId: (before - 1) as EntryId, ...(after && { minEntryId: after as EntryId }) },

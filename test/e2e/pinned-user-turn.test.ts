@@ -89,7 +89,7 @@ it('pins the answered user turn while scrolled up and reveals it on click', asyn
   expect(top).toBeLessThan(view.bottom)
 })
 
-it('keeps the line through a jump to the top of a long run whose turn is not loaded yet', async () => {
+it('names a turn below the loaded history without loading the rows between', async () => {
   const home = await temp('ultimate-pinned-long-')
   cleanup.push(() => removeTemp(home))
   const server = await fauxServer({
@@ -112,9 +112,9 @@ it('keeps the line through a jump to the top of a long run whose turn is not loa
       context,
     )
   ).wait(context)
-  // Hundreds of answers without a turn of the user's: the turn is pages below what the transcript first loads.
+  // A branch's long run: 2,000 answers without a turn of the user's, dozens of history pages below what first loads.
   await server.harness.commit(async (tx) => {
-    for (let index = 1; index <= 300; index++)
+    for (let index = 1; index <= 2000; index++)
       await tx.appendEntry(ultimate, {
         kind: 'pi.assistant',
         model: [fauxAssistantMessage(`Progress ${index}.`)],
@@ -130,20 +130,33 @@ it('keeps the line through a jump to the top of a long run whose turn is not loa
   const page = await browser.newPage({ viewport: { width: 1280, height: 900 } })
   await page.goto(`${server.url}/?conversation=${ultimate}`)
   const log = page.getByRole('log')
-  await log.getByText('Progress 300.', { exact: true }).waitFor()
-  // Record the line on every frame, from the jump to the top in one step until the turn has loaded.
+  await log.getByText('Progress 2000.', { exact: true }).waitFor()
+  const history: string[] = []
+  page.on('request', (request) => {
+    if (request.url().includes('/history?')) history.push(new URL(request.url()).search)
+  })
+  // From the middle of the loaded rows, in one step, record the line on every frame until it names the turn.
   const missing = await page.evaluate(async () => {
     const scroll = document.querySelector('[role=log]')!.firstElementChild!
-    scroll.scrollTop = 0
+    scroll.scrollTop = scroll.scrollHeight / 2
     let gone = 0
     for (let frame = 0; frame < 600; frame++) {
       await new Promise(requestAnimationFrame)
       const line = document.querySelector('[data-pinned-turn]')
       if (frame > 2 && !line) gone++
       if (line?.textContent === 'Start the long job…') return gone
-      if (frame % 10 === 0) scroll.scrollTop = 0
     }
     return -1
   })
   expect(missing).toBe(0)
+  // One request for the stored inputs, not a page of history per 64 answers.
+  expect(history).toHaveLength(1)
+  expect(history[0]).toContain('inputs=1')
+
+  // A click loads the history down to the turn and scrolls to it.
+  await page.locator('[data-pinned-turn]').click()
+  const turn = log.getByText('Start the long job. Report when done.')
+  await turn.waitFor()
+  await page.waitForFunction(() => !document.querySelector('[data-pinned-turn]'))
+  expect(await turn.isVisible()).toBe(true)
 })

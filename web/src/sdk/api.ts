@@ -113,6 +113,14 @@ export function createApi(store: Store, options: { fetch?: typeof fetch } = {}) 
       if (!response.ok) throw new HttpError(response.status, data.error ?? 'Could not load history')
       return data as HistoryResponse
     },
+    /** The inputs of `id` below `before`, newest first, without the entries between them. */
+    inputs: async (id: number, before: number, signal?: AbortSignal): Promise<HistoryResponse> => {
+      const query = new URLSearchParams({ before: String(before), inputs: '1' })
+      const response = await request(conversation(id, `history?${query}`), { signal })
+      const data = await response.json()
+      if (!response.ok) throw new HttpError(response.status, data.error ?? 'Could not load history')
+      return data as HistoryResponse
+    },
     abort: (id?: number) => post<EmptyResponse>(conversation(id, 'abort')),
     cancelSubmission: (submissionId: number, id?: number) =>
       post<EmptyResponse>(conversation(id, `inbox/${submissionId}/cancel`)),
