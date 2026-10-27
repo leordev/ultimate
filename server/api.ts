@@ -171,7 +171,23 @@ async function inputsBefore(conversation: Conversation, before: number): Promise
     cursor = own < 0 ? page.next : undefined
   } while (cursor && inputs.length <= size)
   const entries = inputs.slice(0, size)
-  return { entries, before: inputs.length > size ? entries.at(-1)!.id : undefined }
+  return {
+    entries: entries.map(withoutImages),
+    before: inputs.length > size ? entries.at(-1)!.id : undefined,
+  }
+}
+
+/** An input with its words only: its images are most of its size, and the line shows none. */
+function withoutImages(entry: EntryRecord): EntryRecord {
+  if (!entry.model) return entry
+  return {
+    ...entry,
+    model: entry.model.map((message) =>
+      message.role === 'user' && Array.isArray(message.content)
+        ? { ...message, content: message.content.filter((block) => block.type !== 'image') }
+        : message,
+    ),
+  }
 }
 
 export async function createApi(

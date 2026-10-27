@@ -120,7 +120,16 @@ it('reads only the inputs below a cursor with inputs=1', async () => {
             await tx.appendEntry(server.root.id, {
               kind: 'pi.user',
               input: true,
-              model: [{ role: 'user', content: `Turn ${n}`, timestamp: n }],
+              model: [
+                {
+                  role: 'user',
+                  content: [
+                    { type: 'text', text: `Turn ${n}` },
+                    { type: 'image', data: 'A'.repeat(100_000), mimeType: 'image/png' },
+                  ],
+                  timestamp: n,
+                },
+              ],
             })
           ).id,
         )
@@ -136,6 +145,9 @@ it('reads only the inputs below a cursor with inputs=1', async () => {
     ).json()) as HistoryResponse
     expect(page.entries.map((entry) => entry.id)).toEqual(inputs.slice(0, 2).toReversed())
     expect(page.before).toBeUndefined()
+    // Their words only: the images stay on the server.
+    expect(page.entries[0].model).toMatchObject([{ content: [{ type: 'text', text: 'Turn 1' }] }])
+    expect(JSON.stringify(page).length).toBeLessThan(2_000)
   } finally {
     await server.close()
   }
